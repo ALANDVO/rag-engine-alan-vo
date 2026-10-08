@@ -1,80 +1,35 @@
 #!/usr/bin/env python3
-# rag-engine — Retrieval-Augmented Generation engine that ingests documents (PDF, MD, JSON), chunks and embeds them with an API, and serves semantic search plus generation with grounded citations.
-import sys, os
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from llm_client import LLM
-import math
+"""CLI interface for rag-engine preserving standalone operational workflows."""
+import argparse
+import json
+import os
+import sys
 
-def _cosine(a, b):
-    dot = sum(x * y for x, y in zip(a, b))
-    na = math.sqrt(sum(x * x for x in a)) or 1.0
-    nb = math.sqrt(sum(x * x for x in b)) or 1.0
-    return dot / (na * nb)
+# Ensure backend modules are importable
+sys.path.insert(0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "backend"))
 
-def _embed_text(llm, text):
-    """Embed text using the OpenAI-compatible embeddings endpoint."""
-    import requests
-    headers = {"Content-Type": "application/json"}
-    if llm.api_key:
-        headers["Authorization"] = f"Bearer {llm.api_key}"
-    payload = {"model": os.environ.get("EMBEDDING_MODEL", "text-embedding-3-small"), "input": text[:8000]}
-    r = requests.post(f"{llm.base_url}/embeddings", headers=headers, json=payload, timeout=60)
-    r.raise_for_status()
-    return r.json()["data"][0]["embedding"]
+from app.core.database import get_db, init_db, utc_now
+from app.services.citation_service import verify_grounded_citations
+from app.services.llm_service import llm_service
+from app.services.rag_engine import (
+    chunk_text,
+    compute_hash,
+    generate_deterministic_embedding,
+    hybrid_search,
+)
 
-def _chunk_text(text, chunk_size=1200, overlap=200):
-    """Chunk text by paragraph boundaries with overlap."""
-    paragraphs = re.split(r"\n\s*\n", text)
-    chunks, current = [], ""
-    for para in paragraphs:
-        if len(current) + len(para) + 2 > chunk_size and current:
-            chunks.append(current.strip())
-            current = current[-overlap:] if overlap else ""
-        current += para + "\n\n"
-    if current.strip():
-        chunks.append(current.strip())
-    return [c for c in chunks if len(c) > 20]
 
-def _extract_text(path):
-    """Extract text from supported file formats."""
-    ext = os.path.splitext(path)[1].lower()
-    with open(path, "r", errors="replace") as f:
-        text = f.read()
-    if ext in (".md", ".txt", ".py", ".js", ".go", ".rs", ".json", ".yaml", ".yml", ".toml"):
-        return text
-    if ext == ".pdf":
-        try:
-            import PyPDF2
-            reader = PyPDF2.PdfReader(path)
-            return "\n".join((page.extract_text() or "") for page in reader.pages)
-        except ImportError:
-            return text
-    return text
-
-def _collection_path(name):
-    base = os.path.join(os.path.dirname(__file__), "collections")
-    os.makedirs(base, exist_ok=True)
-    return os.path.join(base, f"{name}.json")
-
-def _load_collection(name):
-    path = _collection_path(name)
-    if not os.path.exists(path):
-        raise FileNotFoundError(f"Collection '{name}' not found. Run 'ingest' first.")
-    with open(path) as f:
-        return json.load(f)
-
-def _save_collection(name, data):
-    with open(_collection_path(name), "w") as f:
-        json.dump(data, f)
-
-def ingest(args):
-    """Ingest documents into a named collection."""
-    llm = LLM()
+def ingest_cli(args):
+    init_db()
     path = args.path
     files = []
     if os.path.isdir(path):
         for root, _, names in os.walk(path):
-            files.extend(os.path.join(root, n) for n in names if n.lower().endswith((".md", ".txt", ".py", ".js", ".go", ".rs", ".json", ".yaml", ".yml", ".toml", ".pdf")))
+            files.extend(
+                os.path.join(root, n)
+                for n in names
+                if n.lower().endswith((".md", ".txt", ".py", ".js", ".json", ".yaml", ".yml"))
+            )
     elif os.path.exists(path):
         files = [path]
     else:
@@ -82,146 +37,119 @@ def ingest(args):
         return
 
     print(f"Ingesting {len(files)} file(s) into collection '{args.name}'...")
-    data = _load_collection(args.name) if os.path.exists(_collection_path(args.name)) else {"name": args.name, "chunks": [], "created": datetime.now().isoformat()}
+    now = utc_now()
 
-    for filepath in files:
-        text = _extract_text(filepath)
-        chunks = _chunk_text(text)
-        if not chunks:
-            print(f"  {filepath}: no chunks (empty or binary)")
-            continue
-        print(f"  {filepath}: {len(chunks)} chunk(s)")
-        for i, chunk in enumerate(chunks):
-            try:
-                embedding = _embed_text(llm, chunk)
-            except Exception as e:
-                print(f"    embed failed for chunk {i}: {e}")
+    with get_db() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO collections (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+            (args.name, f"CLI collection {args.name}", now, now),
+        )
+
+        total_chunks = 0
+        for filepath in files:
+            with open(filepath, "r", errors="replace") as f:
+                content = f.read()
+
+            chunks = chunk_text(content)
+            if not chunks:
                 continue
-            data["chunks"].append({
-                "id": f"{os.path.basename(filepath)}:{i}",
-                "source": filepath,
-                "text": chunk,
-                "embedding": embedding,
-            })
 
-    _save_collection(args.name, data)
-    print(f"\nCollection '{args.name}': {len(data['chunks'])} chunks total")
+            doc_id = f"cli-{compute_hash(filepath)[:10]}"
+            conn.execute(
+                "INSERT OR REPLACE INTO documents (id, collection, name, content_type, char_count, chunk_count, content_hash, metadata_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (doc_id, args.name, os.path.basename(filepath), "text/plain", len(content), len(chunks), compute_hash(content), "{}", now),
+            )
 
-def search(args):
-    """Semantic search over a collection."""
-    llm = LLM()
-    data = _load_collection(args.name)
-    query = args.query
-    print(f"Searching '{args.name}' for: {query}\n")
+            for i, c in enumerate(chunks):
+                cid = f"{doc_id}_c{i}"
+                emb = generate_deterministic_embedding(c["text"])
+                conn.execute(
+                    "INSERT OR REPLACE INTO chunks (id, document_id, collection, chunk_index, text, heading, token_count, embedding_json, content_hash, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (cid, doc_id, args.name, i, c["text"], c["heading"], c["token_count"], json.dumps(emb), c["content_hash"], now),
+                )
+            total_chunks += len(chunks)
 
-    q_emb = _embed_text(llm, query)
-    scored = []
-    for chunk in data["chunks"]:
-        sim = _cosine(q_emb, chunk["embedding"])
-        scored.append((sim, chunk))
-    scored.sort(key=lambda x: -x[0])
+    print(f"Collection '{args.name}': {total_chunks} chunks indexed successfully.")
 
-    top = scored[:args.top]
-    for rank, (sim, chunk) in enumerate(top, 1):
-        print(f"[{rank}] similarity={sim:.4f}  source={chunk['source']}  id={chunk['id']}")
-        snippet = chunk["text"][:300].replace("\n", " ")
-        print(f"    {snippet}...")
-        print()
 
-    if args.output:
-        with open(args.output, "w") as f:
-            json.dump([{"rank": i + 1, "similarity": round(s, 4), "source": c["source"], "text": c["text"]} for i, (s, c) in enumerate(top)], f, indent=2)
-        print(f"Saved to {args.output}")
-    return top
+def search_cli(args):
+    init_db()
+    with get_db() as conn:
+        rows = conn.execute(
+            "SELECT c.id, c.document_id, c.text, c.heading, c.embedding_json, d.name as document_name FROM chunks c JOIN documents d ON c.document_id = d.id WHERE c.collection = ?",
+            (args.collection,),
+        ).fetchall()
 
-def generate(args):
-    """Generate a grounded answer with citations from a collection."""
-    llm = LLM()
-    data = _load_collection(args.name)
-    question = args.question
+    chunks = [
+        {"id": r["id"], "document_id": r["document_id"], "document_name": r["document_name"], "text": r["text"], "heading": r["heading"], "embedding": r["embedding_json"]}
+        for r in rows
+    ]
 
-    q_emb = _embed_text(llm, question)
-    scored = sorted([(_cosine(q_emb, c["embedding"]), c) for c in data["chunks"]], key=lambda x: -x[0])
-    context_chunks = [c for _, c in scored[:args.context]]
+    results = hybrid_search(args.query, chunks, top_k=args.top)
+    print(f"Top {len(results)} results for query: '{args.query}'\n")
+    for r in results:
+        print(f"[{r['rank']}] Score: {r['score']:.4f} (Dense: {r['dense_score']:.4f}, Sparse: {r['sparse_score']:.4f})")
+        print(f"    Source: {r['document_name']} | Heading: {r['heading']}")
+        print(f"    {r['text'][:200]}...\n")
 
-    context = "\n\n".join(f"[{i+1}] (from {c['source']}) {c['text'][:1500]}" for i, c in enumerate(context_chunks))
 
-    answer = llm.generate(
-        f"Answer the question using ONLY the provided context chunks. Cite sources inline as [1], [2], etc. If the answer is not in the context, say so explicitly.\n\n"
-        f"CONTEXT:\n{context}\n\nQUESTION: {question}",
-        system="You are a precise retrieval-augmented answer engine. Never invent facts. Every claim must trace to a cited chunk. Be concise."
-    )
+def generate_cli(args):
+    import asyncio
+    init_db()
 
-    print(f"{'='*60}")
-    print(f"ANSWER")
-    print(f"{'='*60}")
-    print(answer)
-    print(f"\nSOURCES:")
-    for i, c in enumerate(context_chunks, 1):
-        print(f"  [{i}] {c['source']}")
+    async def _run():
+        with get_db() as conn:
+            rows = conn.execute(
+                "SELECT c.id, c.document_id, c.text, c.heading, c.embedding_json, d.name as document_name FROM chunks c JOIN documents d ON c.document_id = d.id WHERE c.collection = ?",
+                (args.collection,),
+            ).fetchall()
 
-    if args.output:
-        with open(args.output, "w") as f:
-            json.dump({"question": question, "answer": answer, "sources": [c["source"] for c in context_chunks], "generated_at": datetime.now().isoformat()}, f, indent=2)
-        print(f"\nSaved to {args.output}")
-    return answer
+        chunks = [
+            {"id": r["id"], "document_id": r["document_id"], "document_name": r["document_name"], "text": r["text"], "heading": r["heading"], "embedding": r["embedding_json"]}
+            for r in rows
+        ]
 
-def stats(args):
-    """Show collection statistics."""
-    data = _load_collection(args.name)
-    chunks = data["chunks"]
-    sources = Counter(c["source"] for c in chunks)
-    total_chars = sum(len(c["text"]) for c in chunks)
-    print(f"{'='*60}")
-    print(f"COLLECTION: {data['name']}")
-    print(f"{'='*60}")
-    print(f"  Created:      {data.get('created', '?')}")
-    print(f"  Chunks:       {len(chunks)}")
-    print(f"  Sources:      {len(sources)} file(s)")
-    print(f"  Total chars:  {total_chars:,}")
-    if chunks:
-        lens = [len(c["text"]) for c in chunks]
-        print(f"  Chunk size:   min={min(lens)} avg={int(statistics.mean(lens))} max={max(lens)}")
-    print(f"\n  SOURCES:")
-    for src, count in sources.most_common(20):
-        print(f"    {count:>4} chunks  {os.path.basename(src)}")
+        retrieved = hybrid_search(args.question, chunks, top_k=args.context)
+        out = await llm_service.generate_response(args.question, context_chunks=retrieved)
+        citations, faith = verify_grounded_citations(out["answer"], retrieved)
 
-    base = os.path.join(os.path.dirname(__file__), "collections")
-    if os.path.isdir(base):
-        print(f"\n  ALL COLLECTIONS:")
-        for fn in sorted(os.listdir(base)):
-            if fn.endswith(".json"):
-                with open(os.path.join(base, fn)) as f:
-                    d = json.load(f)
-                print(f"    {d['name']:<30} {len(d['chunks']):>5} chunks")
-    return None
+        print("=" * 60)
+        print("GROUNDED ANSWER")
+        print("=" * 60)
+        print(out["answer"])
+        print(f"\nGrounding Score: {faith['faithfulness_score'] * 100:.1f}% ({faith['summary']})")
+        print("\nCITATIONS:")
+        for c in citations:
+            status_lbl = "Verified" if c["verified"] else "Ungrounded"
+            print(f"  [{c['index']}] {c['document_name']} ({status_lbl}) - {c['snippet'][:100]}...")
+
+    asyncio.run(_run())
+
 
 def main():
-    import argparse
-    p = argparse.ArgumentParser(prog="rag-engine", description="RAG engine with semantic search and cited generation")
+    p = argparse.ArgumentParser(prog="rag-engine", description="RAG engine CLI")
     sub = p.add_subparsers(dest="cmd", required=True)
 
-    i = sub.add_parser("ingest", help="Ingest documents into a collection")
-    i.add_argument("path"); i.add_argument("--name", default="default")
-    i.set_defaults(fn=ingest)
+    i = sub.add_parser("ingest")
+    i.add_argument("path")
+    i.add_argument("--name", default="default")
+    i.set_defaults(fn=ingest_cli)
 
-    s = sub.add_parser("search", help="Semantic search over a collection")
-    s.add_argument("query"); s.add_argument("--collection", default="default")
-    s.add_argument("--top", type=int, default=5); s.add_argument("--output", default=None)
-    s.set_defaults(fn=search)
+    s = sub.add_parser("search")
+    s.add_argument("query")
+    s.add_argument("--collection", default="default")
+    s.add_argument("--top", type=int, default=5)
+    s.set_defaults(fn=search_cli)
 
-    g = sub.add_parser("generate", help="Grounded generation with citations")
-    g.add_argument("question"); g.add_argument("--collection", default="default")
-    g.add_argument("--context", type=int, default=4); g.add_argument("--output", default=None)
-    g.set_defaults(fn=generate)
-
-    st = sub.add_parser("stats", help="Collection statistics")
-    st.add_argument("--collection", default="default")
-    st.set_defaults(fn=stats)
+    g = sub.add_parser("generate")
+    g.add_argument("question")
+    g.add_argument("--collection", default="default")
+    g.add_argument("--context", type=int, default=4)
+    g.set_defaults(fn=generate_cli)
 
     args = p.parse_args()
-    args.name = getattr(args, "name", getattr(args, "collection", "default"))
     args.fn(args)
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     main()

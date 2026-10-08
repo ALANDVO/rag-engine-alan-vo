@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "name": "rag-engine-alan-vo",
+  "owner": "ALANDVO",
+  "email": "alanvo@gmail.com",
+  "domain": "rag",
+  "workflows": [
+    "Multi-format document ingestion, semantic chunking, and embedding indexing",
+    "Hybrid dense-sparse retrieval with deterministic BM25 and cosine reranking",
+    "Grounded citation generation, faithfulness scoring, and audit logging"
+  ],
+  "auth": "oidc-keycloak-saml-broker",
+  "llm_providers": [
+    "openai-compatible",
+    "anthropic",
+    "gemini",
+    "ollama"
+  ],
+  "summary": "Retrieval-Augmented Generation engine featuring hybrid dense-sparse retrieval, deterministic citation attribution, and faithfulness evaluation.",
+  "version": "1.0.0"
+}

@@ -1,0 +1,28 @@
+{
+  "name": "rag-engine-alan-vo",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "author": "Alan Vo <alanvo@gmail.com>",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc && vite build",
+    "preview": "vite preview",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.3",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.1",
+    "typescript": "^5.4.5",
+    "vite": "^5.3.1",
+    "vitest": "^1.6.0",
+    "@testing-library/react": "^15.0.7",
+    "@testing-library/jest-dom": "^6.4.6",
+    "jsdom": "^24.1.0"
+  }
+}

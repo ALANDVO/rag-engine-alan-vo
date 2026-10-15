@@ -1,15 +1,16 @@
 # Contributing to rag-engine-alan-vo
 
-## Setup
 ```bash
 git clone https://github.com/ALANDVO/rag-engine-alan-vo.git
 cd rag-engine-alan-vo
-pip install -r requirements.txt
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r backend/requirements.txt
 cp .env.example .env
 ```
 
 ## Code Style
-- Python 3.10+, type hints, docstrings
+- Python 3.12+, type hints, docstrings
 - TypeScript strict mode for frontend
 - No hardcoded secrets
 

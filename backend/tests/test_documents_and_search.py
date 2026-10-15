@@ -95,3 +95,34 @@ def test_hybrid_search_api(client, operator_headers, viewer_headers):
     results = search_resp.json()["results"]
     assert len(results) >= 1
     assert "SQLite" in results[0]["text"]
+def test_get_document_content(client, operator_headers, viewer_headers):
+    # Ingest a document with multiple paragraphs
+    payload = {
+        "name": "content-test.md",
+        "text": "First paragraph with some content.\n\nSecond paragraph with more details.\n\nThird paragraph for completeness.",
+        "collection": "default",
+        "chunk_size": 100,
+        "chunk_overlap": 20,
+    }
+    ingest_resp = client.post("/api/documents/ingest", json=payload, headers=operator_headers)
+    assert ingest_resp.status_code == 201
+    doc_id = ingest_resp.json()["id"]
+
+    # Get document content
+    content_resp = client.get(f"/api/documents/{doc_id}/content", headers=viewer_headers)
+    assert content_resp.status_code == 200
+    content_data = content_resp.json()
+
+    assert content_data["id"] == doc_id
+    assert content_data["name"] == "content-test.md"
+    assert content_data["collection"] == "default"
+    assert "First paragraph" in content_data["content"]
+    assert "Second paragraph" in content_data["content"]
+    assert "Third paragraph" in content_data["content"]
+    assert content_data["char_count"] > 0
+    assert content_data["chunk_count"] >= 1
+    assert content_data["created_at"]
+
+    # Test 404 for non-existent document
+    not_found_resp = client.get("/api/documents/doc-nonexistent/content", headers=viewer_headers)
+    assert not_found_resp.status_code == 404

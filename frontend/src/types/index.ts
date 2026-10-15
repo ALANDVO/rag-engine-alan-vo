@@ -1,4 +1,17 @@
-export type UserRole = "viewer" | "operator" | "admin";
+export interface CollectionItem {
+  name: string;
+  description: string;
+  document_count: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface CollectionListResponse {
+  items: CollectionItem[];
+  total: number;
+}
+
+ export type UserRole = "viewer" | "operator" | "admin";
 
 export interface UserSession {
   user_id: string;
@@ -27,6 +40,16 @@ export interface ChunkItem {
   text: string;
   heading: string;
   token_count: number;
+  created_at: string;
+}
+
+export interface DocumentContentResponse {
+  id: string;
+  name: string;
+  collection: string;
+  content: string;
+  char_count: number;
+  chunk_count: number;
   created_at: string;
 }
 

@@ -16,6 +16,7 @@
     "gemini",
     "ollama"
   ],
-  "summary": "Retrieval-Augmented Generation engine featuring hybrid dense-sparse retrieval, deterministic citation attribution, and faithfulness evaluation.",
-  "version": "1.0.0"
+  "summary": "Work in progress: rag-engine-alan-vo",
+  "version": "1.1.0",
+  "status": "work-in-progress"
 }

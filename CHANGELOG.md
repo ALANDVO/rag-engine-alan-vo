@@ -1,9 +1,23 @@
 # Changelog
 
+## 1.1.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 All notable changes to `rag-engine-alan-vo` will be documented in this file.
 
 ## [1.0.0] - 2026-10-08
+## [1.1.0] - 2026-10-15
 
+### Fixed
+- Resolved frontend JSX syntax error in DocumentManager: closed unclosed `<li>` element in the document list rendering, restoring App.tsx smoke-test compilation.
+- Removed obsolete root-level deployment files (`Dockerfile`, `requirements.txt`, `docker-compose.yml`, `llm_client.py`) that referenced a broken `uvicorn main:app` entrypoint (the root `main.py` is a CLI with no `app` attribute) and contradicted the canonical `backend/` + `compose.yaml` layout.
+- Corrected CONTRIBUTING.md setup instructions to reference `backend/requirements.txt` and Python 3.12.
+
+### Added
+- `feature-plan.json` and `PLAN.md` tracking the implemented feature set and incremental development roadmap.
+
+## [1.0.0] - 2026-10-08
 ### Added
 - Complete full-stack baseline layout complying with the owned-app production contract.
 - Modular FastAPI backend with persistent SQLite storage, parameterized queries, and transactional mutations.

@@ -47,6 +47,16 @@ def test_real_http_boundary_full_workflow(client, operator_headers, viewer_heade
     assert len(gen_data["citations"]) >= 1
     assert gen_data["faithfulness"]["faithfulness_score"] > 0.0
 
+    # 5. Document Content Reconstruction via HTTP boundary
+    content_res = client.get(f"/api/documents/{doc_id}/content", headers=viewer_headers)
+    assert content_res.status_code == 200
+    content_data = content_res.json()
+    assert content_data["id"] == doc_id
+    assert content_data["name"] == "integration-spec.md"
+    assert "Integration Spec" in content_data["content"]
+    assert "typed JSON routes" in content_data["content"]
+    assert content_data["chunk_count"] >= 1
+
 
 def test_oidc_pkce_protocol_fixture(client):
     # 1. Generate compliant PKCE code_verifier (43-128 chars) and challenge

@@ -1,7 +1,7 @@
 from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.api import audit, auth, documents, evaluation, generate, search
+from app.api import audit, auth, collections, documents, evaluation, generate, search
 from app.core.config import settings
 from app.core.database import init_db
 from app.models.schemas import HealthResponse
@@ -44,6 +44,7 @@ def create_app() -> FastAPI:
 
     # Include API Routers
     application.include_router(auth.router, prefix="/api")
+    application.include_router(collections.router, prefix="/api")
     application.include_router(documents.router, prefix="/api")
     application.include_router(search.router, prefix="/api")
     application.include_router(generate.router, prefix="/api")

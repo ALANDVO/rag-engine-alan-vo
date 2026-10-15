@@ -1,6 +1,9 @@
 # rag-engine-alan-vo | Alan Vo | AI & Machine Learning
 
-Current version: `1.0.0`.
+> Work in progress. This checkpoint may be incomplete or fail tests. See PLAN.md and STATUS.md before use.
+
+
+Current version: `1.1.0`.
 
 Retrieval-augmented generation often suffers from citation drift, context truncation, and untracked hallucinations when relying solely on opaque prompt wrappers. `rag-engine-alan-vo` addresses this problem for AI engineers and analysts by implementing a deterministic dual-indexing retrieval engine—combining sparse BM25 token matching and dense cosine feature representations via Reciprocal Rank Fusion (RRF)—paired with real-time claim verification and faithfulness scoring.
 

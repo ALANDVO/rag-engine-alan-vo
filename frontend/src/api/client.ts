@@ -1,6 +1,9 @@
 import {
   AuditLogEntry,
   ChunkItem,
+  CollectionItem,
+  CollectionListResponse,
+  DocumentContentResponse,
   DocumentItem,
   EvaluationResult,
   GenerateResponse,
@@ -114,6 +117,10 @@ export const apiClient = {
     return request(`/documents/${documentId}/chunks`);
   },
 
+  async getDocumentContent(documentId: string): Promise<DocumentContentResponse> {
+    return request(`/documents/${documentId}/content`);
+  },
+
   async deleteDocument(documentId: string): Promise<void> {
     return request(`/documents/${documentId}`, {
       method: "DELETE",
@@ -175,5 +182,23 @@ export const apiClient = {
 
   async getStats(): Promise<StatsResponse> {
     return request("/stats");
+  },
+
+  // Collections
+  async listCollections(): Promise<CollectionListResponse> {
+    return request("/collections");
+  },
+
+  async createCollection(name: string, description: string = ""): Promise<CollectionItem> {
+    return request("/collections", {
+      method: "POST",
+      body: JSON.stringify({ name, description }),
+    });
+  },
+
+  async deleteCollection(name: string): Promise<void> {
+    return request(`/collections/${name}`, {
+      method: "DELETE",
+    });
   },
 };

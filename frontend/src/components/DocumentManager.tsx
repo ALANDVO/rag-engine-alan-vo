@@ -1,13 +1,14 @@
 import React, { useEffect, useState } from "react";
 import { apiClient } from "../api/client";
 import { useAuth } from "../context/AuthContext";
-import { ChunkItem, DocumentItem } from "../types";
+import { ChunkItem, DocumentContentResponse, DocumentItem } from "../types";
 
 export const DocumentManager: React.FC = () => {
   const { hasRole } = useAuth();
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selectedDocId, setSelectedDocId] = useState<string | null>(null);
   const [chunks, setChunks] = useState<ChunkItem[]>([]);
+  const [fullContent, setFullContent] = useState<DocumentContentResponse | null>(null);
   const [name, setName] = useState<string>("");
   const [text, setText] = useState<string>("");
   const [collection, setCollection] = useState<string>("default");
@@ -19,6 +20,22 @@ export const DocumentManager: React.FC = () => {
 
   const canEdit = hasRole("operator");
 
+  const loadFullContent = async (docId: string) => {
+    try {
+      setLoading(true);
+      setError(null);
+      const content = await apiClient.getDocumentContent(docId);
+      setFullContent(content);
+    } catch (err: any) {
+      setError(err.message || "Failed to load document content.");
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const closeFullContent = () => {
+    setFullContent(null);
+  };
   const loadDocuments = async () => {
     try {
       setLoading(true);
@@ -208,23 +225,54 @@ Every generated response must explicitly map claims to retrieved source chunks [
                     <span className="badge">{d.chunk_count} chunks</span>
                     <span className="doc-chars">{d.char_count} chars</span>
                   </div>
-                  {canEdit && (
+                  <div className="doc-actions">
                     <button
-                      className="btn-danger-sm"
+                      className="btn-secondary-sm"
                       onClick={(e) => {
                         e.stopPropagation();
-                        handleDelete(d.id);
+                        loadFullContent(d.id);
                       }}
                     >
-                      Delete
+                      View Full Content
                     </button>
-                  )}
+                    {canEdit && (
+                      <button
+                        className="btn-danger-sm"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleDelete(d.id);
+                        }}
+                      >
+                        Delete
+                      </button>
+                    )}
+                  </div>
                 </li>
               ))}
             </ul>
           )}
         </div>
       </div>
+
+      {/* Full Content Viewer */}
+      {fullContent && (
+        <div className="card mt-4">
+          <div className="card-header">
+            <h3>Full Document Content: {fullContent.name}</h3>
+            <button className="btn-secondary-sm" onClick={closeFullContent}>
+              Close
+            </button>
+          </div>
+          <div className="doc-content">
+            <pre>{fullContent.content}</pre>
+            <div className="doc-content-meta">
+              <span>{fullContent.char_count} characters</span>
+              <span>{fullContent.chunk_count} chunks</span>
+              <span>Indexed: {new Date(fullContent.created_at).toLocaleString()}</span>
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Chunk Viewer */}
       {selectedDocId && (

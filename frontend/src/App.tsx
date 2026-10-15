@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { AuthProvider } from "./context/AuthContext";
 import { Navbar } from "./components/Navbar";
+import { CollectionManager } from "./components/CollectionManager";
 import { DocumentManager } from "./components/DocumentManager";
 import { SearchWorkbench } from "./components/SearchWorkbench";
 import { GroundedQA } from "./components/GroundedQA";

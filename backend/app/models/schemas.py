@@ -44,8 +44,25 @@ class DemoLoginRequest(BaseModel):
     role: str = Field(default="operator", pattern="^(viewer|operator|admin)$")
     username: str = "demo-user"
 
+# Collection Schemas
+class CollectionCreate(BaseModel):
+    name: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    description: str = Field(default="", max_length=500)
 
-# Document Schemas
+
+class CollectionResponse(BaseModel):
+    name: str
+    description: str
+    document_count: int
+    created_at: str
+    updated_at: str
+
+
+class CollectionListResponse(BaseModel):
+    items: List[CollectionResponse]
+    total: int
+
+ # Document Schemas
 class DocumentCreate(BaseModel):
     collection: str = Field(default="default", min_length=1, max_length=64)
     name: str = Field(min_length=1, max_length=256)
@@ -74,6 +91,16 @@ class ChunkResponse(BaseModel):
     text: str
     heading: str
     token_count: int
+    created_at: str
+
+
+class DocumentContentResponse(BaseModel):
+    id: str
+    name: str
+    collection: str
+    content: str
+    char_count: int
+    chunk_count: int
     created_at: str
 
 

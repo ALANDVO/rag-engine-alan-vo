@@ -7,6 +7,7 @@ from app.core.security import require_role
 from app.models.schemas import (
     ChunkListResponse,
     ChunkResponse,
+    DocumentContentResponse,
     DocumentCreate,
     DocumentListResponse,
     DocumentResponse,
@@ -176,10 +177,46 @@ async def list_chunks(
                 token_count=r["token_count"],
                 created_at=r["created_at"],
             )
-            for r in rows
+        for r in rows
         ]
 
     return ChunkListResponse(items=items, total=len(items))
+
+
+@router.get("/{document_id}/content", response_model=DocumentContentResponse)
+async def get_document_content(
+    document_id: str,
+    user: Dict[str, Any] = Depends(require_role("viewer")),
+):
+    with get_db() as conn:
+        doc = conn.execute(
+            "SELECT id, name, collection, char_count, chunk_count, created_at FROM documents WHERE id = ?",
+            (document_id,),
+        ).fetchone()
+        if not doc:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document not found.")
+
+        rows = conn.execute(
+            """
+            SELECT text FROM chunks WHERE document_id = ? ORDER BY chunk_index ASC
+            """,
+            (document_id,),
+        ).fetchall()
+
+        if not rows:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Document has no chunks.")
+
+        content = "\n\n".join(r["text"] for r in rows)
+
+    return DocumentContentResponse(
+        id=doc["id"],
+        name=doc["name"],
+        collection=doc["collection"],
+        content=content,
+        char_count=doc["char_count"],
+        chunk_count=doc["chunk_count"],
+        created_at=doc["created_at"],
+    )
 
 
 @router.delete("/{document_id}", status_code=status.HTTP_204_NO_CONTENT)

@@ -5,20 +5,20 @@ from app.core.database import get_db, utc_now
 from app.core.security import compute_pkce_challenge
 
 
-def test_real_http_boundary_full_workflow(client, operator_headers, viewer_headers):
+async def test_real_http_boundary_full_workflow(client, operator_headers, viewer_headers):
     # 1. Ingest via HTTP boundary
     doc_payload = {
         "name": "integration-spec.md",
         "text": "# Integration Spec\n\nThe full-stack system exposes typed JSON routes.\n\nDual dense and sparse representations ensure recall.",
         "collection": "integration-test",
     }
-    ingest_res = client.post("/api/documents/ingest", json=doc_payload, headers=operator_headers)
+    ingest_res = await client.post("/api/documents/ingest", json=doc_payload, headers=operator_headers)
     assert ingest_res.status_code == 201
     doc_data = ingest_res.json()
     doc_id = doc_data["id"]
 
     # 2. Read documents list via HTTP boundary
-    list_res = client.get("/api/documents?collection=integration-test", headers=viewer_headers)
+    list_res = await client.get("/api/documents?collection=integration-test", headers=viewer_headers)
     assert list_res.status_code == 200
     assert any(d["id"] == doc_id for d in list_res.json()["items"])
 
@@ -28,7 +28,7 @@ def test_real_http_boundary_full_workflow(client, operator_headers, viewer_heade
         "collection": "integration-test",
         "top_k": 3,
     }
-    search_res = client.post("/api/search", json=search_payload, headers=viewer_headers)
+    search_res = await client.post("/api/search", json=search_payload, headers=viewer_headers)
     assert search_res.status_code == 200
     search_data = search_res.json()
     assert search_data["total_results"] >= 1
@@ -40,7 +40,7 @@ def test_real_http_boundary_full_workflow(client, operator_headers, viewer_heade
         "collection": "integration-test",
         "top_k": 3,
     }
-    gen_res = client.post("/api/generate", json=gen_payload, headers=viewer_headers)
+    gen_res = await client.post("/api/generate", json=gen_payload, headers=viewer_headers)
     assert gen_res.status_code == 200
     gen_data = gen_res.json()
     assert gen_data["answer"]
@@ -48,7 +48,7 @@ def test_real_http_boundary_full_workflow(client, operator_headers, viewer_heade
     assert gen_data["faithfulness"]["faithfulness_score"] > 0.0
 
     # 5. Document Content Reconstruction via HTTP boundary
-    content_res = client.get(f"/api/documents/{doc_id}/content", headers=viewer_headers)
+    content_res = await client.get(f"/api/documents/{doc_id}/content", headers=viewer_headers)
     assert content_res.status_code == 200
     content_data = content_res.json()
     assert content_data["id"] == doc_id
@@ -58,14 +58,14 @@ def test_real_http_boundary_full_workflow(client, operator_headers, viewer_heade
     assert content_data["chunk_count"] >= 1
 
 
-def test_oidc_pkce_protocol_fixture(client):
+async def test_oidc_pkce_protocol_fixture(client):
     # 1. Generate compliant PKCE code_verifier (43-128 chars) and challenge
     code_verifier = secrets.token_urlsafe(50)
     code_challenge = compute_pkce_challenge(code_verifier)
 
     # 2. Assert rejection on invalid/too short code_verifier
     short_verifier = "short_invalid"
-    reject_res = client.post(
+    reject_res = await client.post(
         "/api/auth/token",
         json={
             "code": "auth-code-12345",
@@ -76,7 +76,7 @@ def test_oidc_pkce_protocol_fixture(client):
     assert reject_res.status_code == 400
 
     # 3. Exchange valid authorization code + verifier
-    exchange_res = client.post(
+    exchange_res = await client.post(
         "/api/auth/token",
         json={
             "code": "valid-auth-code-with-operator-role",
@@ -91,7 +91,7 @@ def test_oidc_pkce_protocol_fixture(client):
 
     # 4. Propagate issued token into an authorized API request
     auth_headers = {"Authorization": f"Bearer {access_token}"}
-    me_res = client.get("/api/auth/me", headers=auth_headers)
+    me_res = await client.get("/api/auth/me", headers=auth_headers)
     assert me_res.status_code == 200
     me_data = me_res.json()
     assert me_data["effective_role"] in ("operator", "admin", "viewer")
@@ -111,3 +111,4 @@ def test_sqlite_persistence_and_transactions():
         row = conn.execute("SELECT name FROM collections WHERE name = 'tx-test'").fetchone()
         assert row is not None
         assert row["name"] == "tx-test"
+

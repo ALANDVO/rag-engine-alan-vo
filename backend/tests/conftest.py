@@ -1,6 +1,6 @@
 import os
 import pytest
-from starlette.testclient import TestClient
+from httpx import AsyncClient, ASGITransport
 
 # Configure environment before importing app
 os.environ["ENVIRONMENT"] = "development"
@@ -21,9 +21,10 @@ def setup_test_db():
 
 
 @pytest.fixture
-def client():
+async def client():
     app = create_app()
-    with TestClient(app) as c:
+    transport = ASGITransport(app=app)
+    async with AsyncClient(transport=transport, base_url="http://test") as c:
         yield c
 
 
@@ -55,3 +56,4 @@ def operator_headers(operator_token):
 @pytest.fixture
 def admin_headers(admin_token):
     return {"Authorization": f"Bearer {admin_token}"}
+

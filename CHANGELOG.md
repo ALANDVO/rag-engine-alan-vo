@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.2.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.1.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
@@ -13,6 +17,7 @@ All notable changes to `rag-engine-alan-vo` will be documented in this file.
 - Resolved frontend JSX syntax error in DocumentManager: closed unclosed `<li>` element in the document list rendering, restoring App.tsx smoke-test compilation.
 - Removed obsolete root-level deployment files (`Dockerfile`, `requirements.txt`, `docker-compose.yml`, `llm_client.py`) that referenced a broken `uvicorn main:app` entrypoint (the root `main.py` is a CLI with no `app` attribute) and contradicted the canonical `backend/` + `compose.yaml` layout.
 - Corrected CONTRIBUTING.md setup instructions to reference `backend/requirements.txt` and Python 3.12.
+- Resolved Starlette/httpx TestClient deprecation warning by migrating test fixtures from `starlette.testclient.TestClient` to `httpx.AsyncClient` with `ASGITransport` in `backend/tests/conftest.py` and updating all affected test functions to async.
 
 ### Added
 - `feature-plan.json` and `PLAN.md` tracking the implemented feature set and incremental development roadmap.
@@ -33,3 +38,4 @@ All notable changes to `rag-engine-alan-vo` will be documented in this file.
 - Full React 18 + TypeScript + Vite frontend dashboard with interactive Document Ingestion, Hybrid Search Workbench, Grounded Q&A with clickable citation pills, AI/ML Evaluation Dashboard, and Audit Log Viewer.
 - Production Dockerfiles for backend and frontend with non-root security boundaries, plus root compose.yaml with Keycloak and SQLite persistent volumes.
 - CI workflow running automated backend pytest suite, frontend Vitest tests, and Docker container builds.
+

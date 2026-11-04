@@ -1,9 +1,20 @@
 # Changelog
 
+## 1.3.0 — work-in-progress checkpoint
+
+Partial code published for continued development. Known issues: STATUS.md.
+
 ## 1.2.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.
 
+### Added
+- NDCG@K (Normalized Discounted Cumulative Gain) ranking quality metric to AI/ML evaluation benchmark
+- NDCG@K computed alongside MRR, Hit@K, Precision@K, and faithfulness metrics in `run_evaluation()`
+- Frontend EvaluationDashboard displays NDCG@K in metrics summary cards (5-column grid) and per-query breakdown table
+- Schema validation extended with `ndcg_at_k` field in `EvaluationMetricSummary`
+- Frontend TypeScript types updated with `ndcg_at_k` in `EvaluationMetrics` and `EvaluationResult.sample_details`
+- CSS grid-5col utility class for 5-column metrics layout
 ## 1.1.0 — work-in-progress checkpoint
 
 Partial code published for continued development. Known issues: STATUS.md.

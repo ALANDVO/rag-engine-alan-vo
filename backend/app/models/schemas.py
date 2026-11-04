@@ -195,6 +195,7 @@ class EvaluationMetricSummary(BaseModel):
     hit_rate_5: float
     precision_k: float
     avg_faithfulness: float
+    ndcg_at_k: float
     total_samples: int
 
 

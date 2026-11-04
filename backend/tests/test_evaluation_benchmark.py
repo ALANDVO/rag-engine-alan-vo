@@ -10,7 +10,13 @@ def test_run_evaluation_benchmark():
     assert metrics["hit_rate_1"] > 0.0
     assert metrics["hit_rate_3"] >= metrics["hit_rate_1"]
     assert metrics["avg_faithfulness"] > 0.0
+    assert metrics["ndcg_at_k"] >= 0.0
+    assert metrics["ndcg_at_k"] <= 1.0
     assert len(res["sample_details"]) == 4
+    # Verify NDCG@K present in sample details
+    for sample in res["sample_details"]:
+        assert "ndcg_at_k" in sample
+        assert 0.0 <= sample["ndcg_at_k"] <= 1.0
 
 
 async def test_evaluation_api_workflow(client, operator_headers, viewer_headers):
@@ -20,6 +26,8 @@ async def test_evaluation_api_workflow(client, operator_headers, viewer_headers)
     data = run_resp.json()
     assert data["dataset_name"] == "rag-benchmark-v1"
     assert data["metrics"]["mrr"] > 0.0
+    assert "ndcg_at_k" in data["metrics"]
+    assert 0.0 <= data["metrics"]["ndcg_at_k"] <= 1.0
 
     # View history via API
     hist_resp = await client.get("/api/evaluation/history", headers=viewer_headers)

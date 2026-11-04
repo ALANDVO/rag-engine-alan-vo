@@ -108,6 +108,7 @@ export interface EvaluationMetrics {
   hit_rate_5: number;
   precision_k: number;
   avg_faithfulness: number;
+  ndcg_at_k: number;
   total_samples: number;
   elapsed_ms: number;
 }
@@ -123,6 +124,7 @@ export interface EvaluationResult {
     first_rank: number;
     score: number;
     faithfulness: number;
+    ndcg_at_k: number;
   }>;
   run_at: string;
 }

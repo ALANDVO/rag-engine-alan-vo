@@ -1,4 +1,5 @@
 import json
+import math
 import time
 from typing import Any, Dict, List, Tuple
 from app.services.rag_engine import hybrid_search, chunk_text
@@ -90,6 +91,7 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
     hits_at_5 = 0
     precisions = []
     faithfulness_scores = []
+    ndcg_scores = []
     sample_details = []
 
     start_time = time.time()
@@ -123,6 +125,15 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
         precision_k = relevant_in_top / top_k
         precisions.append(precision_k)
 
+        # NDCG@K calculation
+        # Relevance: 1 for expected_doc, 0 otherwise
+        relevance_scores = [1.0 if r["document_id"] == expected_doc else 0.0 for r in results[:top_k]]
+        dcg = sum(rel / math.log2(idx + 2) for idx, rel in enumerate(relevance_scores))
+        # Ideal DCG: 1 at position 1, then 0s (since only one relevant doc per query)
+        idcg = 1.0 if top_k >= 1 else 0.0
+        ndcg = dcg / idcg if idcg > 0 else 0.0
+        ndcg_scores.append(ndcg)
+
         # Mock generated response with citation for faithfulness check
         simulated_answer = f"According to the system documentation, {results[0]['text'][:100]} [1]." if results else "No context."
         _, faith_metrics = verify_grounded_citations(simulated_answer, results[:1])
@@ -135,12 +146,14 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
             "first_rank": found_rank or 0,
             "score": results[0]["score"] if results else 0.0,
             "faithfulness": faith_metrics["faithfulness_score"],
+            "ndcg_at_k": ndcg,
         })
 
     total_samples = len(BENCHMARK_QUERIES)
     mrr = sum(reciprocal_ranks) / total_samples if total_samples > 0 else 0.0
     avg_precision = sum(precisions) / total_samples if total_samples > 0 else 0.0
     avg_faithfulness = sum(faithfulness_scores) / total_samples if total_samples > 0 else 0.0
+    avg_ndcg = sum(ndcg_scores) / total_samples if total_samples > 0 else 0.0
 
     metrics = {
         "mrr": round(mrr, 4),
@@ -149,6 +162,7 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
         "hit_rate_5": round(hits_at_5 / total_samples, 4),
         "precision_k": round(avg_precision, 4),
         "avg_faithfulness": round(avg_faithfulness, 4),
+        "ndcg_at_k": round(avg_ndcg, 4),
         "total_samples": total_samples,
         "elapsed_ms": round((time.time() - start_time) * 1000, 2),
     }

@@ -77,7 +77,7 @@ export const EvaluationDashboard: React.FC = () => {
       {currentEval && (
         <div className="mt-4">
           {/* Metrics summary cards */}
-          <div className="grid-4col">
+          <div className="grid-5col">
             <div className="metric-card">
               <span className="metric-title">Mean Reciprocal Rank (MRR)</span>
               <span className="metric-large">
@@ -106,6 +106,13 @@ export const EvaluationDashboard: React.FC = () => {
               </span>
               <span className="metric-sub">Grounded claim alignment</span>
             </div>
+            <div className="metric-card">
+              <span className="metric-title">NDCG@K</span>
+              <span className="metric-large">
+                {(currentEval.metrics.ndcg_at_k * 100).toFixed(1)}%
+              </span>
+              <span className="metric-sub">Discounted cumulative gain</span>
+            </div>
           </div>
 
           {/* Benchmark Queries Table */}
@@ -121,6 +128,7 @@ export const EvaluationDashboard: React.FC = () => {
                     <th>Found Rank</th>
                     <th>Hybrid Score</th>
                     <th>Faithfulness</th>
+                    <th>NDCG@K</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -136,6 +144,7 @@ export const EvaluationDashboard: React.FC = () => {
                       </td>
                       <td>{(s.score * 100).toFixed(1)}%</td>
                       <td>{(s.faithfulness * 100).toFixed(1)}%</td>
+                      <td>{(s.ndcg_at_k * 100).toFixed(1)}%</td>
                     </tr>
                   ))}
                 </tbody>

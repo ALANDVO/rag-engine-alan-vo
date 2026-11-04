@@ -195,6 +195,11 @@ body {
   grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
   gap: 1rem;
 }
+.grid-5col {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 1rem;
+}
 
 .form-group {
   margin-bottom: 1rem;

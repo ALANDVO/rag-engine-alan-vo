@@ -4,7 +4,7 @@ Each round completes one feature or repair. Future items are planned, not implem
 
 ## Current round
 
-remove-obsolete-root-artifacts
+ndcg-evaluation-metric
 
 ## Roadmap
 
@@ -143,4 +143,19 @@ Acceptance:
 - Preflight passes with no missing required files
 
 Implementation: `CONTRIBUTING.md`
+
+### ndcg-evaluation-metric — NDCG@K ranking quality metric for evaluation benchmark
+
+Status: in_progress
+
+Acceptance:
+- run_evaluation() computes NDCG@K alongside existing MRR, Hit@K, Precision@K metrics
+- NDCG@K uses standard DCG/IDCG formula with binary relevance (1 for expected doc, 0 otherwise)
+- Frontend EvaluationDashboard displays NDCG@K in metrics summary cards and per-query breakdown table
+- API response includes ndcg_at_k in both metrics summary and sample details
+- Schema validation accepts ndcg_at_k field
+
+Implementation: `backend/app/services/evaluation_service.py`, `backend/app/models/schemas.py`, `frontend/src/types/index.ts`, `frontend/src/components/EvaluationDashboard.tsx`, `frontend/src/index.css`
+
+Tests: `backend/tests/test_evaluation_benchmark.py`
 

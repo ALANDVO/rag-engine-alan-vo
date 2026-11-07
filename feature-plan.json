@@ -188,7 +188,7 @@
     {
       "id": "ndcg-evaluation-metric",
       "title": "NDCG@K ranking quality metric for evaluation benchmark",
-      "status": "in_progress",
+  "status": "done",
       "acceptance": [
         "run_evaluation() computes NDCG@K alongside existing MRR, Hit@K, Precision@K metrics",
         "NDCG@K uses standard DCG/IDCG formula with binary relevance (1 for expected doc, 0 otherwise)",

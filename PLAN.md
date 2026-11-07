@@ -146,7 +146,7 @@ Implementation: `CONTRIBUTING.md`
 
 ### ndcg-evaluation-metric — NDCG@K ranking quality metric for evaluation benchmark
 
-Status: in_progress
+Status: done
 
 Acceptance:
 - run_evaluation() computes NDCG@K alongside existing MRR, Hit@K, Precision@K metrics

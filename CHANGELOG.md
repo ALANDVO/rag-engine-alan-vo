@@ -56,4 +56,4 @@ All notable changes to `rag-engine-alan-vo` will be documented in this file.
 
 ---
 
-Alan Vo · [alanvo.net](https://alanvo.net)
+Alan Vo · [alanvo.net](https://alanvo.net) · [X: @alanvoasi](https://x.com/alanvoasi)

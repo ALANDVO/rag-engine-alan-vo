@@ -159,3 +159,6 @@ Implementation: `backend/app/services/evaluation_service.py`, `backend/app/model
 
 Tests: `backend/tests/test_evaluation_benchmark.py`
 
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)

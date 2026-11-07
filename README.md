@@ -168,3 +168,7 @@ All data endpoints require Bearer JWT authorization:
 ---
 
 **Built by [Alan Vo](https://github.com/ALANDVO)** | alanvo@gmail.com | AI & Machine Learning
+
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)

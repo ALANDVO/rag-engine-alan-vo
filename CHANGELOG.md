@@ -54,3 +54,6 @@ All notable changes to `rag-engine-alan-vo` will be documented in this file.
 - Production Dockerfiles for backend and frontend with non-root security boundaries, plus root compose.yaml with Keycloak and SQLite persistent volumes.
 - CI workflow running automated backend pytest suite, frontend Vitest tests, and Docker container builds.
 
+---
+
+Alan Vo · [alanvo.net](https://alanvo.net)

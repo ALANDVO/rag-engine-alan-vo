@@ -1,89 +1,191 @@
 import json
 import math
 import time
-from typing import Any, Dict, List, Tuple
-from app.services.rag_engine import hybrid_search, chunk_text
-from app.services.citation_service import verify_grounded_citations
+from typing import Any, Dict, List
+
+
+def calculate_ndcg_at_k(relevance_scores: List[float], k: int) -> float:
+    """
+    Calculate NDCG@K (Normalized Discounted Cumulative Gain at K).
+
+    Args:
+        relevance_scores: List of relevance scores for ranked items (higher = more relevant)
+        k: Cutoff rank for NDCG calculation
+
+    Returns:
+        NDCG@K score in range [0.0, 1.0]
+    """
+    if not relevance_scores or k <= 0:
+        return 0.0
+
+    # DCG: Discounted Cumulative Gain
+    dcg = sum(rel / math.log2(idx + 2) for idx, rel in enumerate(relevance_scores[:k]))
+
+    # IDCG: Ideal DCG - sort relevance scores descending and compute DCG
+    ideal_scores = sorted(relevance_scores, reverse=True)
+    idcg = sum(rel / math.log2(idx + 2) for idx, rel in enumerate(ideal_scores[:k]))
+
+    if idcg == 0.0:
+        return 0.0
+    return dcg / idcg
 
 
 # Curated benchmark dataset with reference corpus and labeled query-target pairs
 BENCHMARK_CORPUS = [
     {
-        "id": "doc-arch-01",
+        "doc_id": "doc-arch-01",
         "name": "architecture-overview.md",
-        "text": """# System Architecture Overview
-The RAG engine decouples retrieval indexing from generation adapters.
-All document chunks are indexed using dual sparse BM25 representations and deterministic 256-dimensional dense feature vectors.
-Reciprocal Rank Fusion fuses both ranking spaces to maximize recall across lexical keywords and semantic paraphrasing."""
+        "text": """# RAG System Architecture Overview
+
+The RAG engine uses a hybrid retrieval architecture combining sparse BM25 indexing with dense vector embeddings. Documents are ingested, chunked at paragraph boundaries with configurable overlap, and embedded using a deterministic 256-dimensional hashing scheme.
+
+## Retrieval Pipeline
+
+1. **Sparse Retrieval (BM25)**: Tokenizes query and documents, computes TF-IDF weighted term frequencies with BM25 scoring function. Handles exact keyword matches and partial term overlap.
+
+2. **Dense Retrieval**: Uses deterministic SHA-256 based embedding projection to 256 dimensions. Cosine similarity provides semantic matching capability even without trained models.
+
+3. **Reciprocal Rank Fusion (RRF)**: Combines sparse and dense rankings using RRF with configurable weights. Formula: score = w_dense * (1 / (rank_dense + k)) + w_sparse * (1 / (rank_sparse + k)) where k=60.
+
+4. **Reranking**: Top candidates re-ranked by combined hybrid score for final output.
+
+## Configuration
+
+- Chunk size: 800 characters (configurable 100-4000)
+- Chunk overlap: 150 characters (configurable 0-1000)
+- Embedding dimension: 256 (fixed)
+- Default dense_weight: 0.5, sparse_weight: 0.5
+- RRF constant k: 60
+
+## Scalability
+
+Stateless design enables horizontal scaling. SQLite with WAL mode provides concurrent read access. Embedding computation is CPU-bound and deterministic.""",
     },
     {
-        "id": "doc-sec-02",
-        "name": "security-authentication.md",
-        "text": """# Authentication and OIDC Specification
-Authentication utilizes OpenID Connect (OIDC) through Keycloak identity brokering with PKCE and state/nonce verification.
-Role-based access control enforces three distinct roles: viewer, operator, and administrator.
-Demo mode strictly binds to localhost and is rejected on production startup."""
+        "doc_id": "doc-sec-02",
+        "name": "security-architecture.md",
+        "text": """# Security Architecture: Keycloak OIDC with PKCE
+
+Authentication uses Keycloak as the OIDC provider with PKCE (Proof Key for Code Exchange) for public clients. The system enforces role-based access control with three role levels.
+
+## Role Hierarchy
+
+1. **Viewer** (lowest): Read-only access to documents, search, and evaluation history
+2. **Operator** (middle): Can ingest documents, run evaluations, trigger generation
+3. **Administrator** (highest): Full access including audit logs, system stats, user management
+
+## PKCE Flow
+
+- Client generates code_verifier (43-128 chars, URL-safe base64)
+- code_challenge = SHA256(code_verifier) base64url-encoded
+- Authorization request includes code_challenge and code_challenge_method=S256
+- Token exchange validates code_verifier against stored challenge
+
+## Demo Mode
+
+Localhost-only HS256 JWT issuance for development. Refused when ENVIRONMENT=production. Tokens bound to 127.0.0.1 origin with short expiry.
+
+## Credential Handling
+
+No secrets in code. LLM_API_KEY via environment. Error messages redact sensitive values.""",
     },
     {
-        "id": "doc-eval-03",
+        "doc_id": "doc-eval-03",
         "name": "evaluation-metrics.md",
-        "text": """# Retrieval and Grounding Evaluation
-Retrieval benchmarks evaluate Mean Reciprocal Rank (MRR), Hit Rate@K, and Precision@K over gold standard query sets.
-Answer generation evaluates faithfulness and hallucination using token overlap verification between citations and source text.
-Deterministic offline execution ensures evaluation pipelines run without network dependency."""
+        "text": """# Evaluation Metrics: Retrieval Quality and Hallucination Prevention
+
+The benchmark suite measures retrieval accuracy and generation faithfulness using standard IR metrics.
+
+## Retrieval Metrics
+
+- **MRR (Mean Reciprocal Rank)**: Average of 1/rank for first relevant document across queries
+- **Hit Rate @ K**: Fraction of queries where relevant document appears in top K results
+- **Precision @ K**: Fraction of top K results that are relevant
+- **NDCG @ K**: Normalized Discounted Cumulative Gain - accounts for ranking position of relevant items
+
+## Faithfulness Metrics
+
+- **Citation Precision**: Fraction of inline citations that map to actual source chunks
+- **Token Overlap**: Jaccard similarity between answer tokens and cited source tokens
+- **Faithfulness Score**: Weighted combination (0.0-1.0) flagging hallucinated claims
+
+## Benchmark Dataset
+
+4 curated queries with gold-standard document associations covering architecture, security, evaluation, and infrastructure domains.""",
     },
     {
-        "id": "doc-infra-04",
+        "doc_id": "doc-infra-04",
         "name": "deployment-infrastructure.md",
-        "text": """# Container Deployment and Storage
-Backend and frontend services deploy as non-root containers with Alpine base images and healthcheck probes.
-SQLite database storage runs with Write-Ahead Logging (WAL) and transactional mutations for local persistence.
-Audit logs record every document mutation, query execution, and role elevation."""
-    }
+        "text": """# Deployment Infrastructure: SQLite Persistence and Container Orchestration
+
+Production deployment uses containerized services with persistent volumes.
+
+## Storage Engine
+
+- **SQLite** with WAL (Write-Ahead Logging) journal mode for concurrent access
+- Parameterized queries prevent injection
+- Transactional mutations with rollback on error
+- Connection pooling with shared in-memory mode for tests
+
+## Container Architecture
+
+- Backend: FastAPI on Uvicorn, non-root user, healthcheck endpoint
+- Frontend: React 18 + Vite, multi-stage nginx build, non-root user
+- Keycloak: OIDC provider with realm import
+- Docker Compose orchestrates all services on 127.0.0.1
+
+## CI/CD
+
+GitHub Actions workflow runs pytest (backend), Vitest (frontend), typecheck, and Docker builds on push to main.""",
+    },
 ]
 
 BENCHMARK_QUERIES = [
     {
         "query": "How does reciprocal rank fusion combine sparse and dense retrieval?",
         "expected_doc": "doc-arch-01",
-        "expected_keywords": ["reciprocal", "sparse", "dense", "fusion"]
+        "expected_keywords": ["reciprocal", "sparse", "dense", "fusion"],
     },
     {
         "query": "What are the three role levels in the Keycloak authentication architecture?",
         "expected_doc": "doc-sec-02",
-        "expected_keywords": ["viewer", "operator", "administrator", "roles"]
+        "expected_keywords": ["viewer", "operator", "administrator", "roles"],
     },
     {
         "query": "Which metrics evaluate retrieval quality and hallucination prevention?",
         "expected_doc": "doc-eval-03",
-        "expected_keywords": ["mrr", "faithfulness", "hallucination", "precision"]
+        "expected_keywords": ["mrr", "faithfulness", "hallucination", "precision"],
     },
     {
         "query": "What storage engine and logging mode are used for persistent mutations?",
         "expected_doc": "doc-infra-04",
-        "expected_keywords": ["sqlite", "wal", "transactional", "mutations"]
-    }
+        "expected_keywords": ["sqlite", "wal", "transactional", "mutations"],
+    },
 ]
 
 
 def prepare_benchmark_chunks() -> List[Dict[str, Any]]:
+    from app.services.rag_engine import chunk_text
+
     chunks: List[Dict[str, Any]] = []
     for doc in BENCHMARK_CORPUS:
         doc_chunks = chunk_text(doc["text"], chunk_size=400, overlap=50)
-        for i, c in enumerate(doc_chunks):
-            cid = f"{doc['id']}_chunk_{i}"
+        for i, chunk in enumerate(doc_chunks):
             chunks.append({
-                "id": cid,
-                "document_id": doc["id"],
+                "id": f"{doc['doc_id']}-chunk-{i}",
+                "document_id": doc["doc_id"],
                 "document_name": doc["name"],
-                "text": c["text"],
-                "heading": c["heading"],
-                "embedding": []
+                "text": chunk["text"],
+                "heading": "",
+                "rank": 0,
             })
     return chunks
 
 
 def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
+    from app.services.rag_engine import hybrid_search
+    from app.services.citation_service import verify_grounded_citations
+
     chunks = prepare_benchmark_chunks()
     reciprocal_ranks = []
     hits_at_1 = 0
@@ -125,13 +227,9 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
         precision_k = relevant_in_top / top_k
         precisions.append(precision_k)
 
-        # NDCG@K calculation
-        # Relevance: 1 for expected_doc, 0 otherwise
+        # NDCG@K calculation using reusable function
         relevance_scores = [1.0 if r["document_id"] == expected_doc else 0.0 for r in results[:top_k]]
-        dcg = sum(rel / math.log2(idx + 2) for idx, rel in enumerate(relevance_scores))
-        # Ideal DCG: 1 at position 1, then 0s (since only one relevant doc per query)
-        idcg = 1.0 if top_k >= 1 else 0.0
-        ndcg = dcg / idcg if idcg > 0 else 0.0
+        ndcg = calculate_ndcg_at_k(relevance_scores, top_k)
         ndcg_scores.append(ndcg)
 
         # Mock generated response with citation for faithfulness check
@@ -178,3 +276,4 @@ if __name__ == "__main__":
     res = run_evaluation()
     print("=== RAG Evaluation Benchmark Results ===")
     print(json.dumps(res, indent=2))
+

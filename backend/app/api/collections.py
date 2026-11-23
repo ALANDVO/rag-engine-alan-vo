@@ -7,6 +7,7 @@ from app.models.schemas import (
     CollectionCreate,
     CollectionListResponse,
     CollectionResponse,
+    CollectionUpdate,
 )
 from app.services.audit_service import log_audit_event
 
@@ -80,6 +81,80 @@ async def list_collections(
     ]
 
     return CollectionListResponse(items=items, total=len(items))
+
+
+@router.patch("/{collection_name}", response_model=CollectionResponse)
+async def update_collection(
+    collection_name: str,
+    update: CollectionUpdate,
+    user: Dict[str, Any] = Depends(require_role("operator")),
+):
+    new_name = update.new_name.strip()
+    if not new_name:
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_CONTENT, detail="Collection name cannot be empty")
+
+    if new_name == collection_name and update.description is None:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="No changes provided")
+
+    now = utc_now()
+    with get_db() as conn:
+        existing = conn.execute("SELECT name FROM collections WHERE name = ?", (collection_name,)).fetchone()
+        if not existing:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=f"Collection '{collection_name}' not found")
+
+        if new_name != collection_name:
+            conflict = conn.execute("SELECT name FROM collections WHERE name = ?", (new_name,)).fetchone()
+            if conflict:
+                raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=f"Collection '{new_name}' already exists")
+
+            # Re-key preserving FK integrity: insert the new parent row, repoint the
+            # dependent documents/chunks, then drop the now-childless old row so the
+            # ON DELETE CASCADE has nothing left to cascade.
+            row = conn.execute(
+                "SELECT description, created_at FROM collections WHERE name = ?",
+                (collection_name,),
+            ).fetchone()
+            conn.execute(
+                "INSERT INTO collections (name, description, created_at, updated_at) VALUES (?, ?, ?, ?)",
+                (new_name, row["description"], row["created_at"], now),
+            )
+            conn.execute("UPDATE documents SET collection = ? WHERE collection = ?", (new_name, collection_name))
+            conn.execute("UPDATE chunks SET collection = ? WHERE collection = ?", (new_name, collection_name))
+            conn.execute("DELETE FROM collections WHERE name = ?", (collection_name,))
+
+        if update.description is not None:
+            conn.execute(
+                "UPDATE collections SET description = ?, updated_at = ? WHERE name = ?",
+                (update.description, now, new_name),
+            )
+
+        row = conn.execute(
+            """
+            SELECT c.name, c.description, c.created_at, c.updated_at,
+                   COUNT(d.id) as document_count
+            FROM collections c
+            LEFT JOIN documents d ON d.collection = c.name
+            WHERE c.name = ?
+            GROUP BY c.name, c.description, c.created_at, c.updated_at
+            """,
+            (new_name,),
+        ).fetchone()
+
+    log_audit_event(
+        action="update_collection",
+        user_id=user["user_id"],
+        user_role=user["effective_role"],
+        resource_id=new_name,
+        details=f"Updated collection '{collection_name}' -> '{new_name}'",
+    )
+
+    return CollectionResponse(
+        name=row["name"],
+        description=row["description"],
+        document_count=row["document_count"],
+        created_at=row["created_at"],
+        updated_at=row["updated_at"],
+    )
 
 
 @router.delete("/{collection_name}", status_code=status.HTTP_204_NO_CONTENT)

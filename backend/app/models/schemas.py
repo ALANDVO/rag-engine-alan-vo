@@ -50,6 +50,11 @@ class CollectionCreate(BaseModel):
     description: str = Field(default="", max_length=500)
 
 
+class CollectionUpdate(BaseModel):
+    new_name: str = Field(min_length=1, max_length=64, pattern=r"^[a-zA-Z0-9_-]+$")
+    description: Optional[str] = Field(default=None, max_length=500)
+
+
 class CollectionResponse(BaseModel):
     name: str
     description: str

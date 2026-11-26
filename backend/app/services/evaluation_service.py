@@ -204,6 +204,15 @@ def run_evaluation(top_k: int = 3) -> Dict[str, Any]:
 
         results = hybrid_search(q, chunks, dense_weight=0.5, sparse_weight=0.5, top_k=5)
 
+        # Deduplicate results by document_id, keeping highest score
+        seen_ids = set()
+        deduped_results = []
+        for r in results:
+            if r["document_id"] not in seen_ids:
+                seen_ids.add(r["document_id"])
+                deduped_results.append(r)
+        results = deduped_results
+
         # Calculate rank of first relevant chunk
         found_rank = None
         for r in results:
